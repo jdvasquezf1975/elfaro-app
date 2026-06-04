@@ -1,12 +1,12 @@
 // ============================================================
-// EL FARO — app.js  v11
+// EL FARO — app.js  v11.2
 // ⚠ CONFIGURACIÓN:
 //   1. Edita firebase-config.js con tus claves de Firebase
 //   2. Renombra tu logo a logo-faro.jpg
 //   3. Edita SHEETS_URL con tu URL de Google Apps Script
 // ============================================================
 
-const SHEETS_URL = 'https://script.google.com/macros/s/AKfycbz6EjnmR6zaGbDBR4Zbv-XDJ1q9fkCZ3VSmfNQV7Lp-jVyFJZD0gJp7XLEG5t6wiHct/exec';
+const SHEETS_URL = 'https://script.google.com/macros/s/REEMPLAZA_CON_TU_URL/exec';
 const LOGO_PATH  = 'logo-faro.jpg';
 
 // ── PINS ──────────────────────────────────────────────────────────────────
@@ -192,6 +192,9 @@ function toggleVitArea(id) {
   render();
 }
 function tempConvert() {
+  // Read live value from DOM input in case user typed without triggering oninput
+  const inp = document.getElementById('inp-temp');
+  if (inp && inp.value) S.vitF.tempVal = inp.value;
   const v = parseFloat(S.vitF.tempVal); if (isNaN(v)) return;
   if (S.vitF.tempUnit === 'F') { S.vitF.tempUnit='C'; S.vitF.tempVal=((v-32)*5/9).toFixed(1); }
   else { S.vitF.tempUnit='F'; S.vitF.tempVal=((v*9/5)+32).toFixed(1); }
@@ -436,6 +439,10 @@ function submitPat() {
   S.patients = [p, ...S.patients];
   S.inscF = { nombre:'',apellido:'',age:'',gender:'',phone:'',aldeaPaciente:'',pregnant:false,breastfeeding:false };
   if (typeof syncPatient === 'function') syncPatient(p);
+  if (SHEETS_URL && !SHEETS_URL.includes('REEMPLAZA')) {
+    fetch(SHEETS_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({type:'new_patient',data:p})}).catch(()=>{});
+  }
   toast(`✓ #${p.dayNum} ${p.nombre} ${p.apellido}`);
   set({stTab:'lista'});
 }
@@ -479,7 +486,7 @@ function renderVitales() {
 
     <div class="fld">
       <label>${t('Presión arterial','Blood pressure')} (mmHg)</label>
-      <input type="text" inputmode="decimal" value="${f.bp}" placeholder="120/80"
+      <input type="text" inputmode="text" value="${f.bp}" placeholder="120/80"
         class="${vitBorderClass('bp',f.bp,f.touched,f.tempUnit)}"
         oninput="S.vitF.bp=this.value"
         onblur="S.vitF.touched.bp=true;render()"/>
@@ -515,7 +522,7 @@ function renderVitales() {
     <div class="fld">
       <label>🌡️ ${t('Temperatura','Temperature')} °${f.tempUnit}</label>
       <div style="display:flex;gap:8px">
-        <input type="number" inputmode="decimal" step="0.1" value="${f.tempVal}" placeholder="${f.tempUnit==='F'?'98.6':'37.0'}"
+        <input id="inp-temp" type="number" inputmode="decimal" step="0.1" value="${f.tempVal}" placeholder="${f.tempUnit==='F'?'98.6':'37.0'}"
           class="${vitBorderClass('temp',f.tempVal,f.touched,f.tempUnit)}"
           style="flex:1"
           oninput="S.vitF.tempVal=this.value"
@@ -757,7 +764,12 @@ function sendRx(id) {
       medico:document.getElementById('dr')?.value||'',
       seguimiento:document.getElementById('seg')?.checked||false,
       prescription:rx,prescribedAt:tnow()},deliveryChecked:[]});
-  if (typeof syncPatient==='function') syncPatient(S.patients.find(x=>x.id===id));
+  const rxPat = S.patients.find(x=>x.id===id);
+  if (typeof syncPatient==='function') syncPatient(rxPat);
+  if (SHEETS_URL && !SHEETS_URL.includes('REEMPLAZA')) {
+    fetch(SHEETS_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({type:'update_patient',data:rxPat})}).catch(()=>{});
+  }
   toast('✓ ' + t('Receta enviada a farmacia','Prescription sent to pharmacy'));
   set({selPatient:null}); S.docRx = {};
 }
@@ -968,8 +980,19 @@ function confirmDelivery(patId) {
   S.inventory = newInv;
   const hist=[...(p.deliveryHistory||[]),{at:tnow(),meds:(p.doctor?.prescription||[]).filter(rx=>checked.includes(rx.medId)).map(rx=>({name:rx.name,qty:rx.qty,u:S.meds.find(m=>m.id===rx.medId)?.u||'u'}))}];
   S.patients = S.patients.map(x=>x.id===patId?{...x,status:'delivered',deliveredAt:tnow(),deliveryChecked:checked,deliveryHistory:hist}:x);
-  if (typeof syncPatient==='function') syncPatient(S.patients.find(x=>x.id===patId));
+  const confirmedPat = S.patients.find(x=>x.id===patId);
+  if (typeof syncPatient==='function') syncPatient(confirmedPat);
   if (typeof syncInventory==='function') syncInventory(S.inventory,S.meds,S.initInventory);
+  // Auto-send delivery + inventory to Google Sheets
+  if (SHEETS_URL && !SHEETS_URL.includes('REEMPLAZA')) {
+    const delivHist = confirmedPat?.deliveryHistory||[];
+    const lastDeliv = delivHist[delivHist.length-1];
+    if (lastDeliv) fetch(SHEETS_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({type:'dispensed',data:{patient:confirmedPat,delivery:lastDeliv,deliveryNum:delivHist.length}})}).catch(()=>{});
+    const invData = S.meds.map(m=>({name:m.n,unit:m.u,initial:S.initInventory[m.id]||0,current:S.inventory[m.id]||0}));
+    fetch(SHEETS_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({type:'inventory_update',data:{meds:invData}})}).catch(()=>{});
+  }
   toast('✓ '+t('Entrega confirmada','Delivery confirmed'));
   set({selPatient:null});
 }
