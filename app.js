@@ -1,5 +1,5 @@
 // ============================================================
-// EL FARO — app.js  v11.2
+// EL FARO — app.js  v11.3
 // ⚠ CONFIGURACIÓN:
 //   1. Edita firebase-config.js con tus claves de Firebase
 //   2. Renombra tu logo a logo-faro.jpg
@@ -210,7 +210,13 @@ function initSession() {
     subscribeToSession(key, data => {
       let changed = false;
       if (data.patients) { S.patients = Object.values(data.patients); changed = true; }
-      if (data.inventory) { S.inventory = data.inventory; changed = true; }
+      if (data.inventory) {
+        // Firebase may wrap as {inventory:{...}} or return flat object
+        S.inventory = (typeof data.inventory === 'object' && data.inventory.inventory)
+          ? data.inventory.inventory
+          : data.inventory;
+        changed = true;
+      }
       if (data.meds && data.meds.length) S.meds = data.meds;
       if (data.initInventory) S.initInventory = data.initInventory;
       if (changed) { saveLocal(); render(); }
@@ -643,6 +649,8 @@ function saveVitals(id) {
     areas:[...f.areas], vitalsAt:tnow(), status:'waiting'});
   if (typeof syncPatient==='function') syncPatient(S.patients.find(x=>x.id===id));
   const ai = f.areas.map(a=>AREAS.find(x=>x.id===a)?.icon||'').join(' ');
+  // Push full state so symptoms/conditions sync to all devices
+  pushFB();
   toast(`✓ ${t('Signos guardados','Vitals saved')} · ${ai}`);
   if (alerts.some(a=>a.level==='alert')) toast('🚨 ' + t('Alertas críticas — revisar','Critical alerts — review'));
   set({selPatient:null});
@@ -993,6 +1001,8 @@ function confirmDelivery(patId) {
     fetch(SHEETS_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({type:'inventory_update',data:{meds:invData}})}).catch(()=>{});
   }
+  // Push full state so inventory updates on ALL devices instantly
+  pushFB();
   toast('✓ '+t('Entrega confirmada','Delivery confirmed'));
   set({selPatient:null});
 }
@@ -1032,7 +1042,13 @@ function renderEspiritual() {
 function togSpirit(pid,key){S.patients=S.patients.map(p=>{if(p.id!==pid)return p;const sp={...p.spiritual};sp[key]=!sp[key];return{...p,spiritual:sp};});set({selPatient:{...S.patients.find(x=>x.id===pid)}});}
 function updSN(pid,v){S.patients=S.patients.map(p=>p.id!==pid?p:{...p,spiritual:{...p.spiritual,notes:v}});}
 function saveSpirit(pid){
-  if(typeof syncPatient==='function')syncPatient(S.patients.find(x=>x.id===pid));
+  const sp = S.patients.find(x=>x.id===pid);
+  if(typeof syncPatient==='function') syncPatient(sp);
+  // Auto-send spiritual to Google Sheets
+  if (SHEETS_URL && !SHEETS_URL.includes('REEMPLAZA')) {
+    fetch(SHEETS_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({type:'spiritual_update',data:sp})}).catch(()=>{});
+  }
   toast('✓ '+t('Guardado','Saved'));set({selPatient:null});
 }
 
