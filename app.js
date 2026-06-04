@@ -1,5 +1,5 @@
 // ============================================================
-// EL FARO — app.js  v11.3
+// EL FARO — app.js  v11.4
 // ⚠ CONFIGURACIÓN:
 //   1. Edita firebase-config.js con tus claves de Firebase
 //   2. Renombra tu logo a logo-faro.jpg
@@ -209,15 +209,24 @@ function initSession() {
     const key = setSessionKey(S.actDate, S.actLoc);
     subscribeToSession(key, data => {
       let changed = false;
-      if (data.patients) { S.patients = Object.values(data.patients); changed = true; }
-      if (data.inventory) {
-        // Firebase may wrap as {inventory:{...}} or return flat object
-        S.inventory = (typeof data.inventory === 'object' && data.inventory.inventory)
-          ? data.inventory.inventory
-          : data.inventory;
+      if (data.patients) {
+        // Firebase returns object keyed by patient id — convert to array
+        const incoming = typeof data.patients === 'object' && !Array.isArray(data.patients)
+          ? Object.values(data.patients)
+          : data.patients;
+        // Merge: keep local unsaved changes, update rest from Firebase
+        S.patients = incoming;
         changed = true;
       }
-      if (data.meds && data.meds.length) S.meds = data.meds;
+      if (data.inventory) {
+        S.inventory = (typeof data.inventory === 'object' && data.inventory.inventory)
+          ? data.inventory.inventory : data.inventory;
+        changed = true;
+      }
+      if (data.meds) {
+        const medsArr = Array.isArray(data.meds) ? data.meds : Object.values(data.meds);
+        if (medsArr.length) S.meds = medsArr;
+      }
       if (data.initInventory) S.initInventory = data.initInventory;
       if (changed) { saveLocal(); render(); }
     });
@@ -449,7 +458,7 @@ function submitPat() {
     fetch(SHEETS_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({type:'new_patient',data:p})}).catch(()=>{});
   }
-  toast(`✓ #${p.dayNum} ${p.nombre} ${p.apellido}`);
+  toast(`✓ #${p.dayNum} ${p.nombre} ${p.apellido} · 🔥 Sincronizando...`);
   set({stTab:'lista'});
 }
 
@@ -651,7 +660,7 @@ function saveVitals(id) {
   const ai = f.areas.map(a=>AREAS.find(x=>x.id===a)?.icon||'').join(' ');
   // Push full state so symptoms/conditions sync to all devices
   pushFB();
-  toast(`✓ ${t('Signos guardados','Vitals saved')} · ${ai}`);
+  toast(`✓ ${t('Signos guardados','Vitals saved')} · ${ai} · 🔥 Sync`);
   if (alerts.some(a=>a.level==='alert')) toast('🚨 ' + t('Alertas críticas — revisar','Critical alerts — review'));
   set({selPatient:null});
 }
@@ -778,7 +787,7 @@ function sendRx(id) {
     fetch(SHEETS_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({type:'update_patient',data:rxPat})}).catch(()=>{});
   }
-  toast('✓ ' + t('Receta enviada a farmacia','Prescription sent to pharmacy'));
+  toast('✓ ' + t('Receta enviada · 🔥 Sync','Prescription sent · 🔥 Sync'));
   set({selPatient:null}); S.docRx = {};
 }
 
@@ -1003,7 +1012,7 @@ function confirmDelivery(patId) {
   }
   // Push full state so inventory updates on ALL devices instantly
   pushFB();
-  toast('✓ '+t('Entrega confirmada','Delivery confirmed'));
+  toast('✓ '+t('Entrega confirmada · 🔥 Sync','Delivery confirmed · 🔥 Sync'));
   set({selPatient:null});
 }
 
@@ -1049,7 +1058,7 @@ function saveSpirit(pid){
     fetch(SHEETS_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({type:'spiritual_update',data:sp})}).catch(()=>{});
   }
-  toast('✓ '+t('Guardado','Saved'));set({selPatient:null});
+  toast('✓ '+t('Espiritual guardado · 🔥 Sync','Spiritual saved · 🔥 Sync'));set({selPatient:null});
 }
 
 // ── ADMIN ──────────────────────────────────────────────────────────────────

@@ -1,8 +1,9 @@
 // ============================================================
-// EL FARO — sync.js  (sincronización Firebase)
+// EL FARO — sync.js  v2  (sincronización Firebase mejorada)
 // ============================================================
 let DB = null;
 let SESSION_KEY = null;
+let _syncToast = null;
 
 function firebaseConfigured() {
   return typeof FIREBASE_CONFIG !== 'undefined' &&
@@ -22,36 +23,48 @@ function initFirebase() {
 }
 
 function setSessionKey(date, location) {
-  SESSION_KEY = (date + '_' + location)
-    .replace(/\//g,'-').replace(/\s+/g,'').replace(/[^a-zA-Z0-9_\-]/g,'');
+  // Normaliza: quita acentos, espacios y caracteres especiales
+  const normalize = str => str
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // quitar acentos
+    .replace(/\//g,'-')
+    .replace(/\s+/g,'')
+    .replace(/[^a-zA-Z0-9_\-]/g,'');
+  SESSION_KEY = normalize(date) + '_' + normalize(location);
   return SESSION_KEY;
 }
 
 function subscribeToSession(key, onData) {
   if (!DB) return;
   SESSION_KEY = key;
+  // Escucha cambios en tiempo real — cualquier escritura de cualquier dispositivo
+  // dispara este callback en todos los demás instantáneamente
   DB.ref('sessions/' + key).on('value', snap => {
     const data = snap.val();
     if (data) onData(data);
   });
 }
 
+// Sincroniza UN paciente (más rápido que full state)
 function syncPatient(patient) {
   if (!DB || !SESSION_KEY) return;
-  DB.ref('sessions/' + SESSION_KEY + '/patients/' + patient.id).set(patient)
-    .then(() => updateSyncUI('online'))
+  DB.ref('sessions/' + SESSION_KEY + '/patients/' + patient.id)
+    .set(patient)
+    .then(() => {
+      updateSyncUI('online');
+      showSyncToast('✓ Sincronizado con todos los dispositivos');
+    })
     .catch(() => updateSyncUI('offline'));
 }
 
 function syncInventory(inventory, meds, initInventory) {
   if (!DB || !SESSION_KEY) return;
-  DB.ref('sessions/' + SESSION_KEY + '/inventory').set({ inventory, meds, initInventory })
+  DB.ref('sessions/' + SESSION_KEY + '/meta').set({ inventory, meds, initInventory })
     .catch(e => console.warn(e));
 }
 
+// Empuja el estado completo — pacientes + inventario
 function syncFullState(state) {
   if (!DB || !SESSION_KEY) return;
-  // Store patients as object keyed by id (Firebase converts arrays unreliably)
   const patientsObj = {};
   (state.patients || []).forEach(p => { if (p.id) patientsObj[p.id] = p; });
   DB.ref('sessions/' + SESSION_KEY).set({
@@ -62,9 +75,15 @@ function syncFullState(state) {
     actLoc: state.actLoc,
     actDate: state.actDate,
     lastSync: new Date().toISOString(),
-  }).then(() => updateSyncUI('online')).catch(() => updateSyncUI('offline'));
+  })
+  .then(() => {
+    updateSyncUI('online');
+    showSyncToast('✓ Sincronizado con todos los dispositivos');
+  })
+  .catch(() => updateSyncUI('offline'));
 }
 
+// ── UI ────────────────────────────────────────────────────────────────────
 function updateSyncUI(status) {
   const el = document.getElementById('sync-bar');
   if (!el) return;
@@ -80,6 +99,21 @@ function updateSyncUI(status) {
     el.className = 'sync';
     el.textContent = `💾 Modo local · ${loc} · ${dt}`;
   }
+}
+
+// Toast verde de confirmación de sync
+function showSyncToast(msg) {
+  clearTimeout(_syncToast);
+  const el = document.getElementById('sync-bar');
+  if (!el) return;
+  const loc = window.S?.actLoc || '';
+  const dt  = window.S?.actDate || '';
+  el.className = 'sync sync-ok';
+  el.textContent = msg;
+  _syncToast = setTimeout(() => {
+    el.className = 'sync';
+    el.textContent = `🔥 Sincronizado · ${loc} · ${dt}`;
+  }, 3000);
 }
 
 async function exportToSheets(state, sheetsUrl) {

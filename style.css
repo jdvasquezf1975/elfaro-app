@@ -191,3 +191,5 @@ body{font-family:var(--fn);color:var(--g9);background:var(--g1)}
 @media(min-width:520px){
   .shell{border-radius:16px;height:90vh;margin-top:5vh;box-shadow:0 8px 40px rgba(0,0,0,.12)}
 }
+
+.sync-ok{background:#1b5e20;color:#fff;font-weight:600}
