@@ -6,7 +6,7 @@
 //   3. Edita SHEETS_URL con tu URL de Google Apps Script
 // ============================================================
 
-const SHEETS_URL = 'https://script.google.com/macros/s/REEMPLAZA_CON_TU_URL/exec';
+const SHEETS_URL = 'https://script.google.com/macros/s/AKfycbz6EjnmR6zaGbDBR4Zbv-XDJ1q9fkCZ3VSmfNQV7Lp-jVyFJZD0gJp7XLEG5t6wiHct/exec';
 const LOGO_PATH  = 'logo-faro.jpg';
 
 // ── PINS ──────────────────────────────────────────────────────────────────
