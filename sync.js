@@ -51,8 +51,11 @@ function syncInventory(inventory, meds, initInventory) {
 
 function syncFullState(state) {
   if (!DB || !SESSION_KEY) return;
+  // Store patients as object keyed by id (Firebase converts arrays unreliably)
+  const patientsObj = {};
+  (state.patients || []).forEach(p => { if (p.id) patientsObj[p.id] = p; });
   DB.ref('sessions/' + SESSION_KEY).set({
-    patients: state.patients || [],
+    patients: patientsObj,
     inventory: state.inventory,
     meds: state.meds,
     initInventory: state.initInventory,

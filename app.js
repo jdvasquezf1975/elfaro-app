@@ -1,12 +1,12 @@
 // ============================================================
-// EL FARO — app.js  v11
+// EL FARO — app.js  v11.1
 // ⚠ CONFIGURACIÓN:
 //   1. Edita firebase-config.js con tus claves de Firebase
 //   2. Renombra tu logo a logo-faro.jpg
 //   3. Edita SHEETS_URL con tu URL de Google Apps Script
 // ============================================================
 
-const SHEETS_URL = 'https://script.google.com/macros/s/AKfycbz6EjnmR6zaGbDBR4Zbv-XDJ1q9fkCZ3VSmfNQV7Lp-jVyFJZD0gJp7XLEG5t6wiHct/exec';
+const SHEETS_URL = 'https://script.google.com/macros/s/REEMPLAZA_CON_TU_URL/exec';
 const LOGO_PATH  = 'logo-faro.jpg';
 
 // ── PINS ──────────────────────────────────────────────────────────────────
@@ -192,6 +192,9 @@ function toggleVitArea(id) {
   render();
 }
 function tempConvert() {
+  // Read live value from DOM input in case user typed without triggering oninput
+  const inp = document.getElementById('inp-temp');
+  if (inp && inp.value) S.vitF.tempVal = inp.value;
   const v = parseFloat(S.vitF.tempVal); if (isNaN(v)) return;
   if (S.vitF.tempUnit === 'F') { S.vitF.tempUnit='C'; S.vitF.tempVal=((v-32)*5/9).toFixed(1); }
   else { S.vitF.tempUnit='F'; S.vitF.tempVal=((v*9/5)+32).toFixed(1); }
@@ -515,7 +518,7 @@ function renderVitales() {
     <div class="fld">
       <label>🌡️ ${t('Temperatura','Temperature')} °${f.tempUnit}</label>
       <div style="display:flex;gap:8px">
-        <input type="number" inputmode="decimal" step="0.1" value="${f.tempVal}" placeholder="${f.tempUnit==='F'?'98.6':'37.0'}"
+        <input id="inp-temp" type="number" inputmode="decimal" step="0.1" value="${f.tempVal}" placeholder="${f.tempUnit==='F'?'98.6':'37.0'}"
           class="${vitBorderClass('temp',f.tempVal,f.touched,f.tempUnit)}"
           style="flex:1"
           oninput="S.vitF.tempVal=this.value"
