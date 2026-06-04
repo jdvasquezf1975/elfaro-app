@@ -74,6 +74,7 @@ function syncFullState(state) {
     actLoc: state.actLoc,
     actDate: state.actDate,
     villages: state.villages || [],
+    patientVillages: state.patientVillages || [],
     operators: state.operators || [],
     almacen: state.almacen || [],
     jornadaNum: state.jornadaNum || '',

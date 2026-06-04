@@ -1,5 +1,5 @@
 // ============================================================
-// EL FARO — app.js  v12
+// EL FARO — app.js  v12.1
 // ⚠ CONFIGURACIÓN:
 //   1. Edita firebase-config.js con tus claves de Firebase
 //   2. Renombra tu logo a logo-faro.jpg
@@ -118,6 +118,7 @@ function defaultState() {
     actLoc: sv.actLoc || '', actDate: sv.actDate || todayStr(),
     especialidadDelDia: sv.especialidadDelDia || '',
     operators: sv.operators || [],
+    patientVillages: sv.patientVillages || [],
     currentOperator: sv.currentOperator || '',
     patients: sv.patients || [],
     dayCounter: sv.dayCounter || 0,
@@ -125,7 +126,7 @@ function defaultState() {
     inventory: sv.inventory || {},
     initInventory: sv.initInventory || {},
     almacen: sv.almacen || [],
-    villages: sv.villages || ['San Lucas Tolimán','Cerro de Oro','San Antonio Palopó','Santa Catarina Palopó','Panabaj'],
+    villages: sv.villages || [],
     selPatient: null, docRx: {}, patView: 'main',
     adminTab: 'stats', stTab: 'registro', newV: '',
     newMedName: '', newMedUnit: 'tab', newMedQty: 0, showNewMedForm: false,
@@ -305,57 +306,154 @@ function render() {
 // ── SETUP ─────────────────────────────────────────────────────────────────
 function renderSetup(app) {
   const logo = LOGO_B64 ? `<img src="${LOGO_B64}" class="login-logo" alt="El Faro"/>` : `<div style="font-weight:700;font-size:22px">El Faro</div>`;
-  app.innerHTML = `
-    <div class="login-hdr">${logo}<div style="font-size:12px;color:var(--g6)">${t('Jornada Médica Móvil','Mobile Medical Mission')}</div></div>
-    <div class="lbar"><div class="ltg">
-      <button class="lt ${S.lang==='es'?'on':''}" onclick="set({lang:'es'})">ES</button>
-      <button class="lt ${S.lang==='en'?'on':''}" onclick="set({lang:'en'})">EN</button>
-    </div></div>
-    <div class="con">
-      <div style="font-size:13px;font-weight:600;margin-bottom:14px;text-align:center">⚙️ ${t('Configurar jornada','Session setup')}</div>
-      <div class="setup-card">
-        <div class="setup-label">🏥 ${t('Número de jornada','Session number')}</div>
-        <input id="setup-jornada" class="setup-sel" placeholder="${t('Ej: 1-26, 2-26...','E.g. 1-26, 2-26...')}" value="${S.jornadaNum||''}"/>
-        <div style="font-size:10px;color:var(--g6);margin-top:5px">${t('Todos los dispositivos deben usar el mismo número','All devices must use the same number')}</div>
+  const isAdmin = S.setupMode === 'admin';
+
+  if (isAdmin) {
+    app.innerHTML = `
+      <div class="login-hdr">${logo}
+        <div style="font-size:11px;color:var(--g6)">${t('Configuración de jornada','Session configuration')}</div>
       </div>
-      <div class="setup-card">
-        <div class="setup-label">📍 ${t('Aldea de la jornada','Session village')}</div>
-        <select id="setup-loc" class="setup-sel">
-          <option value="">${t('Selecciona...','Select...')}</option>
-          ${S.villages.map(v=>`<option value="${v}">${v}</option>`).join('')}
-        </select>
+      <div class="lbar"><div class="ltg">
+        <button class="lt ${S.lang==='es'?'on':''}" onclick="set({lang:'es'})">ES</button>
+        <button class="lt ${S.lang==='en'?'on':''}" onclick="set({lang:'en'})">EN</button>
+      </div></div>
+      <div class="con">
+        <div style="background:var(--aml);border-radius:9px;padding:9px 12px;margin-bottom:13px;font-size:11px;color:var(--am)">
+          ⚙️ <strong>${t('Modo Administrador','Admin Mode')}</strong> — ${t('Define la jornada antes de que los demás se unan','Define the session before others join')}
+        </div>
+        <div class="setup-card">
+          <div class="setup-label">🏥 ${t('Número de jornada','Session number')}</div>
+          <input id="setup-jornada" class="setup-sel" placeholder="1-26" value="${S.jornadaNum||''}"/>
+          <div style="font-size:10px;color:var(--g6);margin-top:4px">${t('Los demás usan este mismo número para unirse','Others use this same number to join')}</div>
+        </div>
+        <div class="setup-card">
+          <div class="setup-label">📍 ${t('Aldea de la jornada','Session village')}</div>
+          <input id="setup-loc" class="setup-sel" placeholder="${t('Escribe el nombre de la aldea...','Write the village name...')}" value="${S.actLoc||''}"/>
+          <div style="font-size:10px;color:var(--g6);margin-top:4px">${t('Campo libre — cualquier aldea','Free field — any village')}</div>
+        </div>
+        <div class="setup-card">
+          <div class="setup-label">📅 ${t('Fecha','Date')}</div>
+          <input type="date" id="setup-date" class="setup-sel" value="${S.actDate || new Date().toISOString().split('T')[0]}"/>
+        </div>
+        <div class="setup-card">
+          <div class="setup-label">⚕️ ${t('Especialidad del día (opcional)','Specialty of the day (optional)')}</div>
+          <input id="setup-esp" class="setup-sel" placeholder="${t('Ej: Traumatología, Nutrición...','E.g. Orthopedics, Nutrition...')}" value="${S.especialidadDelDia||''}"/>
+        </div>
+        <div class="setup-card">
+          <div class="setup-label">👥 ${t('Operadores del día','Day operators')}</div>
+          <div style="margin-bottom:8px">${(S.adminTempOps||[]).map((op,i)=>`<div class="ald-i">
+            <span style="flex:1;font-size:12px">👤 ${op}</span>
+            <button onclick="S.adminTempOps=S.adminTempOps.filter((_,j)=>j!==${i});render()" style="background:none;border:none;color:var(--rd);cursor:pointer;font-size:14px">✕</button>
+          </div>`).join('')||`<div style="font-size:11px;color:var(--g4);padding:4px 0">${t('Sin operadores','No operators yet')}</div>`}</div>
+          <div style="display:flex;gap:6px">
+            <input id="new-op-admin" placeholder="${t('Nombre del operador','Operator name')}" style="flex:1;padding:8px 10px;border:1.5px solid var(--g2);border-radius:7px;font-size:12px;font-family:var(--fn)"/>
+            <button onclick="addAdminOp()" style="padding:8px 13px;border-radius:7px;background:var(--tl);color:#fff;border:none;font-size:12px;font-weight:600;cursor:pointer;font-family:var(--fn)">${t('Agregar','Add')}</button>
+          </div>
+        </div>
+        <div class="setup-card">
+          <div class="setup-label">🏘️ ${t('Aldeas de pacientes (máx. 6)','Patient villages (max 6)')}</div>
+          <div style="font-size:10px;color:var(--g6);margin-bottom:8px">${t('Aldeas cercanas de donde vienen los pacientes','Nearby villages where patients come from')}</div>
+          <div style="margin-bottom:8px">${(S.adminTempPV||[]).map((v,i)=>`<div class="ald-i">
+            <span style="flex:1;font-size:12px">🏘️ ${v}</span>
+            <button onclick="S.adminTempPV=S.adminTempPV.filter((_,j)=>j!==${i});render()" style="background:none;border:none;color:var(--rd);cursor:pointer;font-size:14px">✕</button>
+          </div>`).join('')||`<div style="font-size:11px;color:var(--g4);padding:4px 0">${t('Sin aldeas','No villages yet')}</div>`}</div>
+          <div style="display:flex;gap:6px">
+            <input id="new-pv-admin" placeholder="${t('Nombre de la aldea','Village name')}" style="flex:1;padding:8px 10px;border:1.5px solid var(--g2);border-radius:7px;font-size:12px;font-family:var(--fn)"/>
+            <button onclick="addAdminPV()" style="padding:8px 13px;border-radius:7px;background:var(--tl);color:#fff;border:none;font-size:12px;font-weight:600;cursor:pointer;font-family:var(--fn)">${t('Agregar','Add')}</button>
+          </div>
+        </div>
+        <button class="start-btn" onclick="startAdminSession()">🚀 ${t('Activar jornada','Activate session')}</button>
+        <button onclick="set({setupMode:null})" style="width:100%;padding:10px;background:none;border:none;font-size:12px;color:var(--g4);cursor:pointer;font-family:var(--fn);margin-top:6px">← ${t('Volver','Back')}</button>
+      </div>`;
+  } else {
+    app.innerHTML = `
+      <div class="login-hdr">${logo}
+        <div style="font-size:12px;color:var(--g6)">${t('Jornada Médica Móvil','Mobile Medical Mission')}</div>
       </div>
-      <div class="setup-card">
-        <div class="setup-label">📅 ${t('Fecha','Date')}</div>
-        <input type="date" id="setup-date" class="setup-sel" value="${S.actDate || new Date().toISOString().split('T')[0]}"/>
-      </div>
-      <div class="setup-card">
-        <div class="setup-label">👤 ${t('Operador / Responsable','Operator / Responsible')}</div>
-        <select id="setup-operator" class="setup-sel">
-          <option value="">— ${t('Seleccionar operador','Select operator')} —</option>
-          ${S.operators.map(op=>`<option value="${op}" ${S.currentOperator===op?'selected':''}>${op}</option>`).join('')}
-        </select>
-        <div style="font-size:10px;color:var(--g6);margin-top:5px">${t('Quién está registrando datos hoy','Who is recording data today')}</div>
-      </div>
-      <div class="setup-card">
-        <div class="setup-label">⚕️ ${t('Especialidad del día (opcional)','Specialty of the day (optional)')}</div>
-        <input id="setup-esp" class="setup-sel" placeholder="${t('Ej: Traumatología, Nutrición...','E.g. Orthopedics, Nutrition...')}" value="${S.especialidadDelDia}"/>
-        <div style="font-size:10px;color:var(--g6);margin-top:5px">${t('Si hay especialista hoy. Si no, déjalo vacío.','If there is a guest specialist today. Otherwise, leave blank.')}</div>
-      </div>
-      <button class="start-btn" onclick="startSession()">→ ${t('Iniciar jornada','Start session')}</button>
-    </div>`;
+      <div class="lbar"><div class="ltg">
+        <button class="lt ${S.lang==='es'?'on':''}" onclick="set({lang:'es'})">ES</button>
+        <button class="lt ${S.lang==='en'?'on':''}" onclick="set({lang:'en'})">EN</button>
+      </div></div>
+      <div class="con">
+        <div class="setup-card">
+          <div class="setup-label">🏥 ${t('Número de jornada','Session number')}</div>
+          <input id="setup-jornada" class="setup-sel" placeholder="1-26" value="${S.jornadaNum||''}"/>
+          <div style="font-size:10px;color:var(--g6);margin-top:4px">${t('El coordinador te dará este número','The coordinator will give you this number')}</div>
+        </div>
+        <div class="setup-card">
+          <div class="setup-label">👤 ${t('Tu nombre / Operador','Your name / Operator')}</div>
+          <select id="setup-operator" class="setup-sel">
+            <option value="">— ${t('Seleccionar','Select')} —</option>
+            ${(S.operators||[]).map(op=>`<option value="${op}" ${S.currentOperator===op?'selected':''}>${op}</option>`).join('')}
+          </select>
+          ${!(S.operators||[]).length?`<div style="font-size:10px;color:var(--am);margin-top:4px">⚠ ${t('El administrador debe activar la jornada primero','Admin must activate the session first')}</div>`:''}
+        </div>
+        <button class="start-btn" onclick="startSession()">→ ${t('Unirse a la jornada','Join session')}</button>
+        <div style="text-align:center;margin-top:16px">
+          <button onclick="askAdminPin()" style="font-size:11px;color:var(--g4);background:none;border:none;cursor:pointer;font-family:var(--fn)">⚙ ${t('Configurar nueva jornada (Admin)','Configure new session (Admin)')}</button>
+        </div>
+      </div>`;
+  }
 }
-function startSession() {
+
+function askAdminPin() {
+  const pin = prompt(t('PIN de administrador:','Admin PIN:'));
+  if (pin === PINS.admin) {
+    set({setupMode:'admin', adminTempOps:[...S.operators], adminTempPV:[...S.patientVillages]});
+  } else if (pin !== null) {
+    alert(t('PIN incorrecto','Incorrect PIN'));
+  }
+}
+
+function addAdminOp() {
+  const v = (document.getElementById('new-op-admin')?.value||'').trim();
+  if (!v) return;
+  S.adminTempOps = [...(S.adminTempOps||[]), v];
+  document.getElementById('new-op-admin').value = '';
+  render();
+}
+
+function addAdminPV() {
+  const v = (document.getElementById('new-pv-admin')?.value||'').trim();
+  if (!v || (S.adminTempPV||[]).length >= 6) return;
+  S.adminTempPV = [...(S.adminTempPV||[]), v];
+  document.getElementById('new-pv-admin').value = '';
+  render();
+}
+
+function startAdminSession() {
   const jnum = (document.getElementById('setup-jornada')?.value||'').trim();
-  const loc  = document.getElementById('setup-loc')?.value || '';
+  const loc  = (document.getElementById('setup-loc')?.value||'').trim();
   const dt   = document.getElementById('setup-date')?.value || todayStr();
   const esp  = document.getElementById('setup-esp')?.value || '';
+  if (!jnum) { toast('⚠ ' + t('Escribe el número de jornada','Enter the session number')); return; }
+  if (!loc)  { toast('⚠ ' + t('Escribe la aldea','Enter the village')); return; }
+  S.jornadaNum = jnum;
+  S.actLoc = loc;
+  S.actDate = dt;
+  S.especialidadDelDia = esp;
+  S.operators = [...(S.adminTempOps||[])];
+  S.patientVillages = [...(S.adminTempPV||[])];
+  S.currentOperator = S.operators[0] || '';
+  S.villages = [loc];
+  S.setupDone = true;
+  S.setupMode = null;
+  S.dayCounter = 0;
+  saveLocal();
+  initSession();
+  // Push config to Firebase so all devices can join
+  setTimeout(() => pushFB(), 1000);
+  render();
+}
+
+
+function startSession() {
+  const jnum = (document.getElementById('setup-jornada')?.value||'').trim();
   const op   = document.getElementById('setup-operator')?.value || '';
   if (!jnum) { toast('⚠ ' + t('Escribe el número de jornada','Enter the session number')); return; }
-  if (!loc)  { toast('⚠ ' + t('Selecciona la aldea','Select the village')); return; }
-  S.jornadaNum = jnum; S.actLoc = loc; S.actDate = dt; S.especialidadDelDia = esp;
+  S.jornadaNum = jnum;
   S.currentOperator = op;
-  S.setupDone = true; S.dayCounter = 0;
+  S.setupDone = true; S.dayCounter = S.dayCounter || 0;
   saveLocal();
   initSession();
   render();
@@ -442,8 +540,10 @@ function renderInscripcion() {
       <div class="aldea-row"><span style="font-size:14px">🏘️</span>
         <select onchange="S.inscF.aldeaPaciente=this.value">
           <option value="">— ${t('Seleccionar','Select')} —</option>
-          ${S.villages.map(v=>`<option value="${v}" ${f.aldeaPaciente===v?'selected':''}>${v}</option>`).join('')}
+          ${(S.patientVillages||[]).map(v=>`<option value="${v}" ${f.aldeaPaciente===v?'selected':''}>${v}</option>`).join('')}
+          <option value="__otra__">${t('Otra aldea...','Other village...')}</option>
         </select>
+        ${f.aldeaPaciente==='__otra__'?`<input type="text" value="${f.aldeaPacienteOtra||''}" oninput="S.inscF.aldeaPacienteOtra=this.value" placeholder="${t('Escribir aldea...','Write village...')}" style="width:100%;margin-top:6px;padding:8px 10px;border:1.5px solid var(--g2);border-radius:7px;font-size:12px;font-family:var(--fn)"/>`:``}
       </div>
     </div>
     ${f.gender==='F'?`<div class="r2" style="margin-bottom:11px">
@@ -481,7 +581,7 @@ function submitPat() {
     nombre:f.nombre, apellido:f.apellido, name:`${f.nombre} ${f.apellido}`.trim(),
     age:f.age, gender:f.gender, phone:f.phone||'',
     pregnant:f.pregnant||false, breastfeeding:f.breastfeeding||false,
-    aldeaPaciente:f.aldeaPaciente||S.actLoc,
+    aldeaPaciente:f.aldeaPaciente==='__otra__'?(f.aldeaPacienteOtra||S.actLoc):(f.aldeaPaciente||S.actLoc),
     // symptoms & conditions filled in at Signos Vitales
     symptoms:Object.fromEntries(SYMS.map(s=>[s,false])), symptomsOther:'',
     conditions:Object.fromEntries(CONDS.map(c=>[c,false])), conditionsOther:'',
@@ -1493,6 +1593,10 @@ function onFirebaseReady() {
         }
         if (data.initInventory) S.initInventory = data.initInventory;
         if (data.almacen) { S.almacen = Array.isArray(data.almacen)?data.almacen:Object.values(data.almacen); changed=true; }
+      // Load session config from Firebase when regular user joins
+      if (data.actLoc && !S.actLoc) { S.actLoc = data.actLoc; changed=true; }
+      if (data.actDate && !S.actDate) { S.actDate = data.actDate; changed=true; }
+      if (data.especialidadDelDia !== undefined && !S.especialidadDelDia) { S.especialidadDelDia = data.especialidadDelDia||''; changed=true; }
         if (data.villages && Array.isArray(data.villages) && data.villages.length) {
           S.villages = data.villages; changed = true;
         }
