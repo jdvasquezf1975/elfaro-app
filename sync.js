@@ -74,6 +74,8 @@ function syncFullState(state) {
     initInventory: state.initInventory,
     actLoc: state.actLoc,
     actDate: state.actDate,
+    villages: state.villages || [],
+    operators: state.operators || [],
     lastSync: new Date().toISOString(),
   })
   .then(() => {

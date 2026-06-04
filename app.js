@@ -1,5 +1,5 @@
 // ============================================================
-// EL FARO — app.js  v11.5
+// EL FARO — app.js  v11.6
 // ⚠ CONFIGURACIÓN:
 //   1. Edita firebase-config.js con tus claves de Firebase
 //   2. Renombra tu logo a logo-faro.jpg
@@ -212,11 +212,9 @@ function initSession() {
     subscribeToSession(key, data => {
       let changed = false;
       if (data.patients) {
-        // Firebase returns object keyed by patient id — convert to array
         const incoming = typeof data.patients === 'object' && !Array.isArray(data.patients)
           ? Object.values(data.patients)
           : data.patients;
-        // Merge: keep local unsaved changes, update rest from Firebase
         S.patients = incoming;
         changed = true;
       }
@@ -230,6 +228,16 @@ function initSession() {
         if (medsArr.length) S.meds = medsArr;
       }
       if (data.initInventory) S.initInventory = data.initInventory;
+      // Sync villages across all devices
+      if (data.villages && Array.isArray(data.villages) && data.villages.length) {
+        S.villages = data.villages;
+        changed = true;
+      }
+      // Sync operators across all devices
+      if (data.operators && Array.isArray(data.operators) && data.operators.length) {
+        S.operators = data.operators;
+        changed = true;
+      }
       if (changed) { saveLocal(); render(); }
     });
   }
@@ -1197,7 +1205,7 @@ function renderAldeas() {
   </div>`).join('')}</div>
   <div style="display:flex;gap:6px">
     <input id="nald" value="${S.newV||''}" placeholder="${t('Nombre de la aldea','Village name')}" oninput="S.newV=this.value" style="flex:1;padding:9px 11px;border:1.5px solid var(--g2);border-radius:8px;font-size:12px;font-family:var(--fn)"/>
-    <button type="button" onclick="var v=(S.newV||'').trim();if(!v)return;if(!S.villages.includes(v))S.villages=[...S.villages,v];S.newV='';toast('✓ '+v);render()" style="padding:9px 13px;border-radius:8px;background:var(--tl);color:#fff;border:none;font-size:12px;font-weight:600;cursor:pointer;font-family:var(--fn)">${t('Agregar','Add')}</button>
+    <button type="button" onclick="var v=(S.newV||'').trim();if(!v)return;if(!S.villages.includes(v)){S.villages=[...S.villages,v];pushFB();}S.newV='';toast('✓ '+v);render()" style="padding:9px 13px;border-radius:8px;background:var(--tl);color:#fff;border:none;font-size:12px;font-weight:600;cursor:pointer;font-family:var(--fn)">${t('Agregar','Add')}</button>
   </div>`;
 }
 
@@ -1227,11 +1235,13 @@ function addOperator() {
   if (S.operators.includes(name)) { toast('⚠ ' + t('Ya existe','Already exists')); return; }
   S.operators = [...S.operators, name];
   S.newOperator = '';
+  pushFB();
   toast(`✓ ${name} ${t('agregado','added')}`);
   render();
 }
 function removeOperator(i) {
   S.operators = S.operators.filter((_,j) => j !== i);
+  pushFB();
   render();
 }
 
