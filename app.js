@@ -1,5 +1,5 @@
 // ============================================================
-// EL FARO — app.js  v11.8
+// EL FARO — app.js  v11.9
 // ⚠ CONFIGURACIÓN:
 //   1. Edita firebase-config.js con tus claves de Firebase
 //   2. Renombra tu logo a logo-faro.jpg
@@ -1301,4 +1301,31 @@ function exportCSV(type) {
 }
 
 // ── START ──────────────────────────────────────────────────────────────────
+// Inicializar Firebase inmediatamente al cargar la página
+if (typeof initFirebase === 'function') initFirebase();
+// Si ya hay una sesión activa, suscribirse
+if (S.setupDone && S.actLoc && S.actDate) {
+  if (typeof setSessionKey === 'function') setSessionKey(S.actDate, S.actLoc);
+  if (typeof subscribeToSession === 'function') {
+    const key = typeof setSessionKey === 'function' ? setSessionKey(S.actDate, S.actLoc) : S.actDate+'_'+S.actLoc;
+    subscribeToSession(key, data => {
+      let changed = false;
+      if (data.patients) {
+        S.patients = typeof data.patients === 'object' && !Array.isArray(data.patients)
+          ? Object.values(data.patients) : data.patients;
+        changed = true;
+      }
+      if (data.inventory) {
+        S.inventory = (typeof data.inventory === 'object' && data.inventory.inventory)
+          ? data.inventory.inventory : data.inventory;
+        changed = true;
+      }
+      if (data.meds) { const m = Array.isArray(data.meds)?data.meds:Object.values(data.meds); if(m.length) S.meds=m; }
+      if (data.initInventory) S.initInventory = data.initInventory;
+      if (data.villages && Array.isArray(data.villages) && data.villages.length) { S.villages=data.villages; changed=true; }
+      if (data.operators && Array.isArray(data.operators) && data.operators.length) { S.operators=data.operators; changed=true; }
+      if (changed) { saveLocal(); render(); }
+    });
+  }
+}
 render();
