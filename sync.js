@@ -23,12 +23,12 @@ function initFirebase() {
 }
 
 function setSessionKey(jornadaNum, location) {
-  // Key = jornadaNum + location, normalized
-  const normalize = str => str
+  const normalize = str => (str||'')
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
     .replace(/\//g,'-').replace(/\s+/g,'')
     .replace(/[^a-zA-Z0-9_\-]/g,'');
-  SESSION_KEY = 'J' + normalize(jornadaNum) + '_' + normalize(location||'');
+  // Key is just the jornada number — location not needed for sync
+  SESSION_KEY = 'J' + normalize(jornadaNum);
   return SESSION_KEY;
 }
 

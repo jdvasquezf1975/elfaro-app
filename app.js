@@ -1,5 +1,5 @@
 // ============================================================
-// EL FARO — app.js  v12.1
+// EL FARO — app.js  v12.2
 // ⚠ CONFIGURACIÓN:
 //   1. Edita firebase-config.js con tus claves de Firebase
 //   2. Renombra tu logo a logo-faro.jpg
@@ -451,6 +451,32 @@ function startSession() {
   const jnum = (document.getElementById('setup-jornada')?.value||'').trim();
   const op   = document.getElementById('setup-operator')?.value || '';
   if (!jnum) { toast('⚠ ' + t('Escribe el número de jornada','Enter the session number')); return; }
+
+  // If operators not loaded yet, connect to Firebase first and wait
+  if (!S.operators.length && op === '') {
+    S.jornadaNum = jnum;
+    saveLocal();
+    // Connect and wait for Firebase data
+    if (typeof initFirebase === 'function') initFirebase();
+    if (typeof setSessionKey === 'function' && typeof subscribeToSession === 'function') {
+      const key = setSessionKey(jnum, '');
+      toast(t('Conectando...','Connecting...'));
+      subscribeToSession(key, data => {
+        if (data.operators && data.operators.length) {
+          S.operators = data.operators;
+          S.actLoc = data.actLoc || '';
+          S.actDate = data.actDate || todayStr();
+          S.especialidadDelDia = data.especialidadDelDia || '';
+          S.patientVillages = data.patientVillages || [];
+          S.villages = data.villages || [];
+          saveLocal();
+          render(); // Re-render setup with operators populated
+        }
+      });
+    }
+    return;
+  }
+
   S.jornadaNum = jnum;
   S.currentOperator = op;
   S.setupDone = true; S.dayCounter = S.dayCounter || 0;
