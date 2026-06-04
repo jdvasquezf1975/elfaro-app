@@ -56,7 +56,7 @@ function writePatient(ss, p) {
   if (!p) return;
   const headers = [
     '#Día','Código','Nombre','Apellido','Edad','Género','Teléfono',
-    'Aldea Paciente','Aldea Jornada','Fecha','Hora Registro',
+    'Aldea Paciente','Aldea Jornada','Fecha','Hora Registro','Registrado Por',
     'BP','Pulso','Resp','Peso kg','Peso lb','Temp','Unidad Temp','Hora Signos',
     'Áreas Atención',
     'Fiebre','Diarrea','Vómitos','Dolor Cabeza','Dolor Articular','Tos','Hongos',
@@ -73,7 +73,7 @@ function writePatient(ss, p) {
     p.dayNum||'', p.code||'', p.nombre||p.name||'', p.apellido||'',
     p.age||'', p.gender==='M'?'Masculino':p.gender==='F'?'Femenino':p.gender||'',
     p.phone||'', p.aldeaPaciente||'', p.location||'',
-    p.date||'', p.createdAt||'',
+    p.date||'', p.createdAt||'', p.registradoPor||'',
     p.bp||'', p.pulse||'', p.resp||'',
     p.weightKg||'', p.weightLb||'',
     p.temp||'', p.tempUnit||'F', p.vitalsAt||'',
