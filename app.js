@@ -1,5 +1,5 @@
 // ============================================================
-// EL FARO — app.js  v11.6
+// EL FARO — app.js  v11.8
 // ⚠ CONFIGURACIÓN:
 //   1. Edita firebase-config.js con tus claves de Firebase
 //   2. Renombra tu logo a logo-faro.jpg
@@ -100,7 +100,10 @@ function vitBorderClass(field, val, touched, tempUnit) {
 }
 
 // ── HELPERS ───────────────────────────────────────────────────────────────
-const todayStr = () => new Date().toLocaleDateString('es-GT');
+const todayStr = () => {
+  const d = new Date();
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+};
 const tnow     = () => new Date().toLocaleTimeString('es-GT',{hour:'2-digit',minute:'2-digit'});
 const genCode  = () => Math.random().toString(36).substr(2,5).toUpperCase();
 const genMedId = () => 'mx_' + Math.random().toString(36).substr(2,6);
@@ -124,6 +127,7 @@ function defaultState() {
     selPatient: null, docRx: {}, patView: 'main',
     adminTab: 'stats', stTab: 'registro', newV: '',
     newMedName: '', newMedUnit: 'tab', newMedQty: 0, showNewMedForm: false,
+    stationOperator: sv.stationOperator || '',
     vitF: { patientId:'', bp:'', pulse:'', resp:'', weightKg:'', weightLb:'', tempVal:'', tempUnit:'C', areas:[], touched:{bp:false,pulse:false,temp:false},
       symptoms: Object.fromEntries(SYMS.map(s=>[s,false])), symptomsOther:'',
       conditions: Object.fromEntries(CONDS.map(c=>[c,false])), conditionsOther:'' },
@@ -269,10 +273,19 @@ function render() {
       <div class="hdr-info"><div class="hdr-st">${st.ico} ${st.lbl}</div><div class="hdr-dt">${S.actDate}</div></div>
       <button class="exit-btn" onclick="set({station:null,selPatient:null,patView:'main'})">← ${t('Salir','Exit')}</button>
     </div>
-    <div class="lbar"><div class="ltg">
-      <button class="lt ${S.lang==='es'?'on':''}" onclick="set({lang:'es'})">ES</button>
-      <button class="lt ${S.lang==='en'?'on':''}" onclick="set({lang:'en'})">EN</button>
-    </div></div>
+    <div class="lbar" style="justify-content:space-between;padding:4px 12px">
+      <div class="ltg">
+        <button class="lt ${S.lang==='es'?'on':''}" onclick="set({lang:'es'})">ES</button>
+        <button class="lt ${S.lang==='en'?'on':''}" onclick="set({lang:'en'})">EN</button>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px">
+        <span style="font-size:10px;color:var(--g6)">👤</span>
+        <select onchange="S.stationOperator=this.value" style="border:1px solid var(--g2);border-radius:20px;font-size:10px;padding:2px 6px;font-family:var(--fn);background:var(--g1);color:var(--g9)">
+          <option value="">${t('Operador','Operator')}...</option>
+          ${S.operators.map(op=>`<option value="${op}" ${(S.stationOperator||S.currentOperator)===op?'selected':''}>${op}</option>`).join('')}
+        </select>
+      </div>
+    </div>
     <div class="con" id="con"></div>`;
 
   const con = document.getElementById('con');
@@ -466,7 +479,7 @@ function submitPat() {
     code:genCode(), dayNum:S.dayCounter, id:S.dayCounter+'_'+genCode(),
     registradoPor:S.currentOperator||'',
     areas:[], status:'waiting', createdAt:tnow(), date:S.actDate, location:S.actLoc,
-    bp:'',pulse:'',resp:'',weightKg:'',weightLb:'',temp:'',tempUnit:'F',vitalsAt:'',
+    bp:'',pulse:'',resp:'',weightKg:'',weightLb:'',temp:'',tempUnit:'C',vitalsAt:'',
     deliveryChecked:[], deliveryHistory:[],
     spiritual:{prayed:false,accepted:false,reconciled:false,interested:false,notes:''},
     dental:{rellenos:0,extracciones:0,rayosX:false,tratEspecial:false,notas:'',medico:''},
@@ -677,7 +690,8 @@ function saveVitals(id) {
     temp:f.tempVal, tempUnit:f.tempUnit,
     symptoms:{...f.symptoms}, symptomsOther:f.symptomsOther||'',
     conditions:{...f.conditions}, conditionsOther:f.conditionsOther||'',
-    areas:[...f.areas], vitalsAt:tnow(), status:'waiting'});
+    areas:[...f.areas], vitalsAt:tnow(), operadorVitales:S.stationOperator||S.currentOperator||'',
+    status:'waiting'});
   if (typeof syncPatient==='function') syncPatient(S.patients.find(x=>x.id===id));
   const ai = f.areas.map(a=>AREAS.find(x=>x.id===a)?.icon||'').join(' ');
   // Push full state so symptoms/conditions sync to all devices
@@ -802,7 +816,8 @@ function sendRx(id) {
     doctor:{...p.doctor,diagnostico:dx,notas:document.getElementById('dn')?.value||'',
       medico:document.getElementById('dr')?.value||'',
       seguimiento:document.getElementById('seg')?.checked||false,
-      prescription:rx,prescribedAt:tnow()},deliveryChecked:[]});
+      prescription:rx,prescribedAt:tnow(),
+      operadorDoctor:S.stationOperator||S.currentOperator||''},deliveryChecked:[]});
   const rxPat = S.patients.find(x=>x.id===id);
   if (typeof syncPatient==='function') syncPatient(rxPat);
   if (SHEETS_URL && !SHEETS_URL.includes('REEMPLAZA')) {
@@ -1018,7 +1033,7 @@ function confirmDelivery(patId) {
   (p.doctor?.prescription||[]).forEach(rx=>{if(checked.includes(rx.medId))newInv[rx.medId]=Math.max(0,(newInv[rx.medId]||0)-rx.qty);});
   S.inventory = newInv;
   const hist=[...(p.deliveryHistory||[]),{at:tnow(),meds:(p.doctor?.prescription||[]).filter(rx=>checked.includes(rx.medId)).map(rx=>({name:rx.name,qty:rx.qty,u:S.meds.find(m=>m.id===rx.medId)?.u||'u'}))}];
-  S.patients = S.patients.map(x=>x.id===patId?{...x,status:'delivered',deliveredAt:tnow(),deliveryChecked:checked,deliveryHistory:hist}:x);
+  S.patients = S.patients.map(x=>x.id===patId?{...x,status:'delivered',deliveredAt:tnow(),deliveryChecked:checked,deliveryHistory:hist,operadorFarmacia:S.stationOperator||S.currentOperator||''}:x);
   const confirmedPat = S.patients.find(x=>x.id===patId);
   if (typeof syncPatient==='function') syncPatient(confirmedPat);
   if (typeof syncInventory==='function') syncInventory(S.inventory,S.meds,S.initInventory);
@@ -1073,6 +1088,7 @@ function renderEspiritual() {
 function togSpirit(pid,key){S.patients=S.patients.map(p=>{if(p.id!==pid)return p;const sp={...p.spiritual};sp[key]=!sp[key];return{...p,spiritual:sp};});set({selPatient:{...S.patients.find(x=>x.id===pid)}});}
 function updSN(pid,v){S.patients=S.patients.map(p=>p.id!==pid?p:{...p,spiritual:{...p.spiritual,notes:v}});}
 function saveSpirit(pid){
+  S.patients = S.patients.map(p=>p.id!==pid?p:{...p,operadorEspiritual:S.stationOperator||S.currentOperator||''});
   const sp = S.patients.find(x=>x.id===pid);
   if(typeof syncPatient==='function') syncPatient(sp);
   // Auto-send spiritual to Google Sheets

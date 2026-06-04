@@ -56,15 +56,15 @@ function writePatient(ss, p) {
   if (!p) return;
   const headers = [
     '#Día','Código','Nombre','Apellido','Edad','Género','Teléfono',
-    'Aldea Paciente','Aldea Jornada','Fecha','Hora Registro','Registrado Por',
-    'BP','Pulso','Resp','Peso kg','Peso lb','Temp','Unidad Temp','Hora Signos',
+    'Aldea Paciente','Aldea Jornada','Fecha','Hora Registro','Op. Inscripción',
+    'BP','Pulso','Resp','Peso kg','Peso lb','Temp','Unidad Temp','Hora Signos','Op. Signos Vitales',
     'Áreas Atención',
     'Fiebre','Diarrea','Vómitos','Dolor Cabeza','Dolor Articular','Tos','Hongos',
     'Otros Síntomas',
     'Hipertensión','Diabetes','Parkinson','Artritis','Alergias','Desnutrición',
     'Otras Condiciones',
-    'Diagnóstico','Notas Médico','Médico','Seguimiento',
-    'Estado','Hora Receta','Hora Entrega'
+    'Diagnóstico','Notas Médico','Médico','Op. Doctor','Seguimiento',
+    'Estado','Hora Receta','Op. Farmacia','Hora Entrega','Op. Espiritual'
   ];
   const sheet = getOrCreate(ss, 'Pacientes', headers);
   const rows = sheet.getDataRange().getValues();
@@ -76,7 +76,7 @@ function writePatient(ss, p) {
     p.date||'', p.createdAt||'', p.registradoPor||'',
     p.bp||'', p.pulse||'', p.resp||'',
     p.weightKg||'', p.weightLb||'',
-    p.temp||'', p.tempUnit||'F', p.vitalsAt||'',
+    p.temp||'', p.tempUnit||'C', p.vitalsAt||'', p.operadorVitales||'',
     (p.areas||[]).join(', '),
     yn(p.symptoms,'fiebre'), yn(p.symptoms,'diarrea'), yn(p.symptoms,'vomitos'),
     yn(p.symptoms,'dolor_cabeza'), yn(p.symptoms,'dolor_articular'),
@@ -86,10 +86,11 @@ function writePatient(ss, p) {
     yn(p.conditions,'alergias'), yn(p.conditions,'desnutricion'),
     p.conditionsOther||'',
     (p.doctor&&p.doctor.diagnostico)||'', (p.doctor&&p.doctor.notas)||'',
-    (p.doctor&&p.doctor.medico)||'',
+    (p.doctor&&p.doctor.medico)||'', (p.doctor&&p.doctor.operadorDoctor)||'',
     (p.doctor&&p.doctor.seguimiento)?'Sí':'No',
     statusLabel(p.status),
-    (p.doctor&&p.doctor.prescribedAt)||'', p.deliveredAt||''
+    (p.doctor&&p.doctor.prescribedAt)||'', p.operadorFarmacia||'',
+    p.deliveredAt||'', p.operadorEspiritual||''
   ];
   if (idx === -1) sheet.appendRow(row);
   else sheet.getRange(idx+2, 1, 1, row.length).setValues([row]);
