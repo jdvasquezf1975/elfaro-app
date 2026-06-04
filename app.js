@@ -1,5 +1,5 @@
 // ============================================================
-// EL FARO — app.js  v11.4
+// EL FARO — app.js  v11.5
 // ⚠ CONFIGURACIÓN:
 //   1. Edita firebase-config.js con tus claves de Firebase
 //   2. Renombra tu logo a logo-faro.jpg
@@ -113,6 +113,8 @@ function defaultState() {
     setupDone: false,
     actLoc: sv.actLoc || '', actDate: sv.actDate || todayStr(),
     especialidadDelDia: sv.especialidadDelDia || '',
+    operators: sv.operators || ['María López','Juan García','Ana Pérez','Pedro Chumil'],
+    currentOperator: sv.currentOperator || '',
     patients: sv.patients || [],
     dayCounter: sv.dayCounter || 0,
     meds: sv.meds || [...MEDS_DEFAULT],
@@ -122,7 +124,7 @@ function defaultState() {
     selPatient: null, docRx: {}, patView: 'main',
     adminTab: 'stats', stTab: 'registro', newV: '',
     newMedName: '', newMedUnit: 'tab', newMedQty: 0, showNewMedForm: false,
-    vitF: { patientId:'', bp:'', pulse:'', resp:'', weightKg:'', weightLb:'', tempVal:'', tempUnit:'F', areas:[], touched:{bp:false,pulse:false,temp:false},
+    vitF: { patientId:'', bp:'', pulse:'', resp:'', weightKg:'', weightLb:'', tempVal:'', tempUnit:'C', areas:[], touched:{bp:false,pulse:false,temp:false},
       symptoms: Object.fromEntries(SYMS.map(s=>[s,false])), symptomsOther:'',
       conditions: Object.fromEntries(CONDS.map(c=>[c,false])), conditionsOther:'' },
     inscF: { nombre:'',apellido:'',age:'',gender:'',phone:'',aldeaPaciente:'',pregnant:false,breastfeeding:false },
@@ -254,7 +256,7 @@ function render() {
   const logo = LOGO_B64 ? `<img src="${LOGO_B64}" class="hdr-logo" alt="El Faro"/>` : `<span style="font-weight:700;font-size:13px">El Faro</span>`;
 
   app.innerHTML = `
-    <div id="sync-bar" class="sync">✓ ${S.actLoc} · ${S.actDate}</div>
+    <div id="sync-bar" class="sync">✓ ${S.actLoc} · ${S.actDate}${S.currentOperator?' · 👤 '+S.currentOperator:''}</div>
     <div class="hdr">${logo}<div class="hdr-sep"></div>
       <div class="hdr-info"><div class="hdr-st">${st.ico} ${st.lbl}</div><div class="hdr-dt">${S.actDate}</div></div>
       <button class="exit-btn" onclick="set({station:null,selPatient:null,patView:'main'})">← ${t('Salir','Exit')}</button>
@@ -297,7 +299,15 @@ function renderSetup(app) {
       </div>
       <div class="setup-card">
         <div class="setup-label">📅 ${t('Fecha','Date')}</div>
-        <input type="date" id="setup-date" class="setup-sel" value="${S.actDate}"/>
+        <input type="date" id="setup-date" class="setup-sel" value="${S.actDate || new Date().toISOString().split('T')[0]}"/>
+      </div>
+      <div class="setup-card">
+        <div class="setup-label">👤 ${t('Operador / Responsable','Operator / Responsible')}</div>
+        <select id="setup-operator" class="setup-sel">
+          <option value="">— ${t('Seleccionar operador','Select operator')} —</option>
+          ${S.operators.map(op=>`<option value="${op}" ${S.currentOperator===op?'selected':''}>${op}</option>`).join('')}
+        </select>
+        <div style="font-size:10px;color:var(--g6);margin-top:5px">${t('Quién está registrando datos hoy','Who is recording data today')}</div>
       </div>
       <div class="setup-card">
         <div class="setup-label">⚕️ ${t('Especialidad del día (opcional)','Specialty of the day (optional)')}</div>
@@ -312,7 +322,10 @@ function startSession() {
   const dt  = document.getElementById('setup-date')?.value || todayStr();
   const esp = document.getElementById('setup-esp')?.value || '';
   if (!loc) { toast('⚠ ' + t('Selecciona la aldea','Select the village')); return; }
-  S.actLoc = loc; S.actDate = dt; S.especialidadDelDia = esp; S.setupDone = true; S.dayCounter = 0;
+  const op = document.getElementById('setup-operator')?.value || '';
+  S.actLoc = loc; S.actDate = dt; S.especialidadDelDia = esp;
+  S.currentOperator = op;
+  S.setupDone = true; S.dayCounter = 0;
   saveLocal();
   initSession();
   render();
@@ -443,6 +456,7 @@ function submitPat() {
     symptoms:Object.fromEntries(SYMS.map(s=>[s,false])), symptomsOther:'',
     conditions:Object.fromEntries(CONDS.map(c=>[c,false])), conditionsOther:'',
     code:genCode(), dayNum:S.dayCounter, id:S.dayCounter+'_'+genCode(),
+    registradoPor:S.currentOperator||'',
     areas:[], status:'waiting', createdAt:tnow(), date:S.actDate, location:S.actLoc,
     bp:'',pulse:'',resp:'',weightKg:'',weightLb:'',temp:'',tempUnit:'F',vitalsAt:'',
     deliveryChecked:[], deliveryHistory:[],
@@ -525,13 +539,13 @@ function renderVitales() {
     <div class="r2">
       <div class="fld">
         <label>⚖️ ${t('Peso (kg)','Weight (kg)')}</label>
-        <input type="number" inputmode="decimal" step="0.1" value="${f.weightKg}" placeholder="kg"
-          oninput="S.vitF.weightKg=this.value;S.vitF.weightLb=this.value?(parseFloat(this.value)*2.20462).toFixed(1):'';render()"/>
+        <input type="text" inputmode="decimal" value="${f.weightKg}" placeholder="kg"
+          oninput="S.vitF.weightKg=this.value;if(parseFloat(this.value)>0)S.vitF.weightLb=(parseFloat(this.value)*2.20462).toFixed(1)"/>
       </div>
       <div class="fld">
         <label>⚖️ ${t('Peso (lb)','Weight (lb)')}</label>
-        <input type="number" inputmode="decimal" step="0.1" value="${f.weightLb}" placeholder="lb"
-          oninput="S.vitF.weightLb=this.value;S.vitF.weightKg=this.value?(parseFloat(this.value)*0.453592).toFixed(1):'';render()"/>
+        <input type="text" inputmode="decimal" value="${f.weightLb}" placeholder="lb"
+          oninput="S.vitF.weightLb=this.value;if(parseFloat(this.value)>0)S.vitF.weightKg=(parseFloat(this.value)*0.453592).toFixed(1)"/>
       </div>
     </div>
     <div class="fld">
@@ -634,7 +648,7 @@ function selVitals(id) {
   const p = S.patients.find(x=>x.id===id);
   S.vitF = { patientId:id, bp:p.bp||'', pulse:p.pulse||'', resp:p.resp||'',
     weightKg:p.weightKg||'', weightLb:p.weightLb||'',
-    tempVal:p.temp||'', tempUnit:p.tempUnit||'F',
+    tempVal:p.temp||'', tempUnit:p.tempUnit||'C',
     areas:[...(p.areas||[])],
     symptoms:{...(p.symptoms||Object.fromEntries(SYMS.map(s=>[s,false])))},
     symptomsOther:p.symptomsOther||'',
@@ -1068,11 +1082,13 @@ function renderAdmin() {
     <button class="tab ${tab==='stats'?'on':''}" onclick="set({adminTab:'stats'})">📊 Stats</button>
     <button class="tab ${tab==='inv'?'on':''}" onclick="set({adminTab:'inv'})">📦 ${t('Inv.','Inv.')}</button>
     <button class="tab ${tab==='alds'?'on':''}" onclick="set({adminTab:'alds'})">📍 ${t('Aldeas','Villages')}</button>
+    <button class="tab ${tab==='users'?'on':''}" onclick="set({adminTab:'users'})">👤 ${t('Usuarios','Users')}</button>
     <button class="tab ${tab==='export'?'on':''}" onclick="set({adminTab:'export'})">↑ Sync</button>
   </div>`;
   if(tab==='stats') h+=renderStats();
   else if(tab==='inv') h+=renderInv();
   else if(tab==='alds') h+=renderAldeas();
+  else if(tab==='users') h+=renderUsers();
   else h+=renderExport();
   return h;
 }
@@ -1183,6 +1199,40 @@ function renderAldeas() {
     <input id="nald" value="${S.newV||''}" placeholder="${t('Nombre de la aldea','Village name')}" oninput="S.newV=this.value" style="flex:1;padding:9px 11px;border:1.5px solid var(--g2);border-radius:8px;font-size:12px;font-family:var(--fn)"/>
     <button type="button" onclick="var v=(S.newV||'').trim();if(!v)return;if(!S.villages.includes(v))S.villages=[...S.villages,v];S.newV='';toast('✓ '+v);render()" style="padding:9px 13px;border-radius:8px;background:var(--tl);color:#fff;border:none;font-size:12px;font-weight:600;cursor:pointer;font-family:var(--fn)">${t('Agregar','Add')}</button>
   </div>`;
+}
+
+
+// ── USUARIOS ──────────────────────────────────────────────────────────────
+function renderUsers() {
+  const ops = S.operators || [];
+  return `<div class="stl">👤 ${t('Operadores / Usuarios','Operators / Users')}</div>
+  <div style="font-size:11px;color:var(--g6);margin-bottom:10px">${t('Estas personas aparecerán para seleccionar al inicio de cada jornada.','These people appear for selection at the start of each session.')}</div>
+  <div style="margin-bottom:10px">
+    ${ops.length===0?`<div style="text-align:center;padding:16px;color:var(--g4);font-size:12px">${t('Sin operadores — agrega el primero abajo','No operators — add the first one below')}</div>`:''}
+    ${ops.map((op,i)=>`<div class="ald-i">
+      <span style="flex:1;font-size:12px">👤 ${op}</span>
+      <button type="button" onclick="removeOperator(${i})" style="background:none;border:none;color:var(--rd);cursor:pointer;font-size:14px;padding:2px 5px">✕</button>
+    </div>`).join('')}
+  </div>
+  <div style="display:flex;gap:6px">
+    <input id="new-op" value="${S.newOperator||''}" placeholder="${t('Nombre del operador','Operator name')}"
+      oninput="S.newOperator=this.value"
+      style="flex:1;padding:9px 11px;border:1.5px solid var(--g2);border-radius:8px;font-size:12px;font-family:var(--fn)"/>
+    <button type="button" onclick="addOperator()" style="padding:9px 13px;border-radius:8px;background:var(--tl);color:#fff;border:none;font-size:12px;font-weight:600;cursor:pointer;font-family:var(--fn)">${t('Agregar','Add')}</button>
+  </div>`;
+}
+function addOperator() {
+  const name = (S.newOperator||'').trim();
+  if (!name) { toast('⚠ ' + t('Escribe un nombre','Enter a name')); return; }
+  if (S.operators.includes(name)) { toast('⚠ ' + t('Ya existe','Already exists')); return; }
+  S.operators = [...S.operators, name];
+  S.newOperator = '';
+  toast(`✓ ${name} ${t('agregado','added')}`);
+  render();
+}
+function removeOperator(i) {
+  S.operators = S.operators.filter((_,j) => j !== i);
+  render();
 }
 
 function renderExport() {
