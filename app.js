@@ -1,5 +1,5 @@
 // ============================================================
-// EL FARO — app.js  v11.10
+// EL FARO — app.js  v12
 // ⚠ CONFIGURACIÓN:
 //   1. Edita firebase-config.js con tus claves de Firebase
 //   2. Renombra tu logo a logo-faro.jpg
@@ -114,15 +114,17 @@ function defaultState() {
     lang: sv.lang || 'es',
     station: null, pinTarget: null, pinInput: '', pinError: false,
     setupDone: false,
+    jornadaNum: sv.jornadaNum || '',
     actLoc: sv.actLoc || '', actDate: sv.actDate || todayStr(),
     especialidadDelDia: sv.especialidadDelDia || '',
-    operators: sv.operators || ['María López','Juan García','Ana Pérez','Pedro Chumil'],
+    operators: sv.operators || [],
     currentOperator: sv.currentOperator || '',
     patients: sv.patients || [],
     dayCounter: sv.dayCounter || 0,
-    meds: sv.meds || [...MEDS_DEFAULT],
-    inventory: sv.inventory || Object.fromEntries(MEDS_DEFAULT.map(m=>[m.id,20])),
-    initInventory: sv.initInventory || Object.fromEntries(MEDS_DEFAULT.map(m=>[m.id,20])),
+    meds: sv.meds || [],
+    inventory: sv.inventory || {},
+    initInventory: sv.initInventory || {},
+    almacen: sv.almacen || [],
     villages: sv.villages || ['San Lucas Tolimán','Cerro de Oro','San Antonio Palopó','Santa Catarina Palopó','Panabaj'],
     selPatient: null, docRx: {}, patView: 'main',
     adminTab: 'stats', stTab: 'registro', newV: '',
@@ -211,8 +213,8 @@ const t = (es, en) => S.lang === 'es' ? es : en;
 // ── FIREBASE SUBSCRIPTION ─────────────────────────────────────────────────
 function initSession() {
   if (typeof initFirebase === 'function') initFirebase();
-  if (typeof subscribeToSession === 'function' && S.actLoc && S.actDate) {
-    const key = setSessionKey(S.actDate, S.actLoc);
+  if (typeof subscribeToSession === 'function' && S.jornadaNum) {
+    const key = setSessionKey(S.jornadaNum, S.actLoc);
     subscribeToSession(key, data => {
       let changed = false;
       if (data.patients) {
@@ -268,7 +270,7 @@ function render() {
   const logo = LOGO_B64 ? `<img src="${LOGO_B64}" class="hdr-logo" alt="El Faro"/>` : `<span style="font-weight:700;font-size:13px">El Faro</span>`;
 
   app.innerHTML = `
-    <div id="sync-bar" class="sync">✓ ${S.actLoc} · ${S.actDate}${S.currentOperator?' · 👤 '+S.currentOperator:''}</div>
+    <div id="sync-bar" class="sync">✓ Jornada ${S.jornadaNum} · ${S.actLoc} · ${S.actDate}${S.currentOperator?' · 👤 '+S.currentOperator:''}</div>
     <div class="hdr">${logo}<div class="hdr-sep"></div>
       <div class="hdr-info"><div class="hdr-st">${st.ico} ${st.lbl}</div><div class="hdr-dt">${S.actDate}</div></div>
       <button class="exit-btn" onclick="set({station:null,selPatient:null,patView:'main'})">← ${t('Salir','Exit')}</button>
@@ -312,6 +314,11 @@ function renderSetup(app) {
     <div class="con">
       <div style="font-size:13px;font-weight:600;margin-bottom:14px;text-align:center">⚙️ ${t('Configurar jornada','Session setup')}</div>
       <div class="setup-card">
+        <div class="setup-label">🏥 ${t('Número de jornada','Session number')}</div>
+        <input id="setup-jornada" class="setup-sel" placeholder="${t('Ej: 1-26, 2-26...','E.g. 1-26, 2-26...')}" value="${S.jornadaNum||''}"/>
+        <div style="font-size:10px;color:var(--g6);margin-top:5px">${t('Todos los dispositivos deben usar el mismo número','All devices must use the same number')}</div>
+      </div>
+      <div class="setup-card">
         <div class="setup-label">📍 ${t('Aldea de la jornada','Session village')}</div>
         <select id="setup-loc" class="setup-sel">
           <option value="">${t('Selecciona...','Select...')}</option>
@@ -339,12 +346,14 @@ function renderSetup(app) {
     </div>`;
 }
 function startSession() {
-  const loc = document.getElementById('setup-loc')?.value || '';
-  const dt  = document.getElementById('setup-date')?.value || todayStr();
-  const esp = document.getElementById('setup-esp')?.value || '';
-  if (!loc) { toast('⚠ ' + t('Selecciona la aldea','Select the village')); return; }
-  const op = document.getElementById('setup-operator')?.value || '';
-  S.actLoc = loc; S.actDate = dt; S.especialidadDelDia = esp;
+  const jnum = (document.getElementById('setup-jornada')?.value||'').trim();
+  const loc  = document.getElementById('setup-loc')?.value || '';
+  const dt   = document.getElementById('setup-date')?.value || todayStr();
+  const esp  = document.getElementById('setup-esp')?.value || '';
+  const op   = document.getElementById('setup-operator')?.value || '';
+  if (!jnum) { toast('⚠ ' + t('Escribe el número de jornada','Enter the session number')); return; }
+  if (!loc)  { toast('⚠ ' + t('Selecciona la aldea','Select the village')); return; }
+  S.jornadaNum = jnum; S.actLoc = loc; S.actDate = dt; S.especialidadDelDia = esp;
   S.currentOperator = op;
   S.setupDone = true; S.dayCounter = 0;
   saveLocal();
@@ -1107,12 +1116,14 @@ function renderAdmin() {
     <button class="tab ${tab==='inv'?'on':''}" onclick="set({adminTab:'inv'})">📦 ${t('Inv.','Inv.')}</button>
     <button class="tab ${tab==='alds'?'on':''}" onclick="set({adminTab:'alds'})">📍 ${t('Aldeas','Villages')}</button>
     <button class="tab ${tab==='users'?'on':''}" onclick="set({adminTab:'users'})">👤 ${t('Usuarios','Users')}</button>
+    <button class="tab ${tab==='almacen'?'on':''}" onclick="set({adminTab:'almacen'})">🏪 ${t('Almacén','Warehouse')}</button>
     <button class="tab ${tab==='export'?'on':''}" onclick="set({adminTab:'export'})">↑ Sync</button>
   </div>`;
   if(tab==='stats') h+=renderStats();
   else if(tab==='inv') h+=renderInv();
   else if(tab==='alds') h+=renderAldeas();
   else if(tab==='users') h+=renderUsers();
+  else if(tab==='almacen') h+=renderAlmacen();
   else h+=renderExport();
   return h;
 }
@@ -1261,6 +1272,162 @@ function removeOperator(i) {
   render();
 }
 
+
+// ── ALMACÉN ───────────────────────────────────────────────────────────────
+const ALMACEN_CATS = [
+  {id:'medicamento', icon:'💊', es:'Medicamento',    en:'Medication'},
+  {id:'equipo',      icon:'⚖️', es:'Equipo',         en:'Equipment'},
+  {id:'espiritual',  icon:'✝️', es:'Art. Espiritual',en:'Spiritual Item'},
+];
+
+function renderAlmacen() {
+  const items = S.almacen || [];
+  const cat = S.almacenCat || 'all';
+  const view = S.almacenView || 'list';
+  const filtered = cat==='all' ? items : items.filter(i=>i.cat===cat);
+
+  let h = `
+  <div style="display:flex;gap:5px;margin-bottom:11px;flex-wrap:wrap">
+    <button onclick="set({almacenCat:'all'})" style="padding:4px 10px;border-radius:20px;font-size:11px;cursor:pointer;font-family:var(--fn);border:1.5px solid ${cat==='all'?'var(--tl)':'var(--g2)'};background:${cat==='all'?'var(--tll)':'var(--w)'};color:${cat==='all'?'var(--tl)':'var(--g6)'}">Todos</button>
+    ${ALMACEN_CATS.map(c=>`<button onclick="set({almacenCat:'${c.id}'})" style="padding:4px 10px;border-radius:20px;font-size:11px;cursor:pointer;font-family:var(--fn);border:1.5px solid ${cat===c.id?'var(--tl)':'var(--g2)'};background:${cat===c.id?'var(--tll)':'var(--w)'};color:${cat===c.id?'var(--tl)':'var(--g6)'}">
+      ${c.icon} ${S.lang==='es'?c.es:c.en}
+    </button>`).join('')}
+    <button onclick="set({almacenView:'add'})" style="margin-left:auto;padding:4px 12px;border-radius:20px;font-size:11px;cursor:pointer;font-family:var(--fn);border:none;background:var(--tl);color:#fff;font-weight:600">+ ${S.lang==='es'?'Agregar':'Add'}</button>
+  </div>`;
+
+  // Add item form
+  if (view === 'add') {
+    h += `<div style="background:var(--tll);border:1.5px solid var(--tl);border-radius:10px;padding:13px;margin-bottom:12px">
+      <div style="font-size:12px;font-weight:600;color:var(--tl);margin-bottom:10px">➕ ${S.lang==='es'?'Nuevo artículo':'New item'}</div>
+      <div class="fld"><label>${S.lang==='es'?'Categoría':'Category'}</label>
+        <select id="alm-cat" style="width:100%;padding:8px 10px;border:1.5px solid var(--g2);border-radius:7px;font-size:12px;font-family:var(--fn)">
+          ${ALMACEN_CATS.map(c=>`<option value="${c.id}">${c.icon} ${S.lang==='es'?c.es:c.en}</option>`).join('')}
+        </select>
+      </div>
+      <div class="fld"><label>${S.lang==='es'?'Nombre':'Name'}</label>
+        <input id="alm-name" type="text" placeholder="${S.lang==='es'?'Ej: Acetaminofén 500mg, Báscula...':'E.g. Acetaminophen 500mg, Scale...'}" style="width:100%;padding:8px 10px;border:1.5px solid var(--g2);border-radius:7px;font-size:12px;font-family:var(--fn)"/>
+      </div>
+      <div class="r2">
+        <div class="fld"><label>${S.lang==='es'?'Cantidad inicial':'Initial qty'}</label>
+          <input id="alm-qty" type="number" value="0" min="0" style="width:100%;padding:8px 10px;border:1.5px solid var(--g2);border-radius:7px;font-size:12px;font-family:var(--fn)"/>
+        </div>
+        <div class="fld"><label>${S.lang==='es'?'Unidad':'Unit'}</label>
+          <input id="alm-unit" type="text" placeholder="${S.lang==='es'?'tab, piezas, m...':'tabs, pcs, m...'}" style="width:100%;padding:8px 10px;border:1.5px solid var(--g2);border-radius:7px;font-size:12px;font-family:var(--fn)"/>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button onclick="addAlmacenItem()" style="flex:1;padding:10px;border-radius:7px;background:var(--tl);color:#fff;border:none;font-size:12px;font-weight:600;cursor:pointer;font-family:var(--fn)">✓ ${S.lang==='es'?'Guardar':'Save'}</button>
+        <button onclick="set({almacenView:'list'})" style="flex:1;padding:10px;border-radius:7px;background:var(--g1);color:var(--g6);border:1.5px solid var(--g2);font-size:12px;font-weight:600;cursor:pointer;font-family:var(--fn)">${S.lang==='es'?'Cancelar':'Cancel'}</button>
+      </div>
+    </div>`;
+  }
+
+  // Move item form
+  if (view === 'move' && S.almacenSelItem !== undefined) {
+    const item = items[S.almacenSelItem];
+    h += `<div style="background:var(--aml);border:1.5px solid var(--am);border-radius:10px;padding:13px;margin-bottom:12px">
+      <div style="font-size:12px;font-weight:600;color:var(--am);margin-bottom:8px">📦 ${item.name} — Stock: ${item.stock} ${item.unit||''}</div>
+      <div style="display:flex;gap:8px;margin-bottom:10px">
+        <button onclick="S.almacenMoveType='entrada';render()" style="flex:1;padding:8px;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;font-family:var(--fn);border:1.5px solid ${S.almacenMoveType==='entrada'?'var(--gn)':'var(--g2)'};background:${S.almacenMoveType==='entrada'?'var(--gnl)':'var(--w)'};color:${S.almacenMoveType==='entrada'?'var(--gn)':'var(--g6)'}">⬆ ${S.lang==='es'?'Entrada':'In'}</button>
+        <button onclick="S.almacenMoveType='salida';render()" style="flex:1;padding:8px;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;font-family:var(--fn);border:1.5px solid ${S.almacenMoveType==='salida'?'var(--rd)':'var(--g2)'};background:${S.almacenMoveType==='salida'?'var(--rdl)':'var(--w)'};color:${S.almacenMoveType==='salida'?'var(--rd)':'var(--g6)'}">⬇ ${S.lang==='es'?'Salida':'Out'}</button>
+      </div>
+      <div class="r2">
+        <div class="fld"><label>${S.lang==='es'?'Cantidad':'Qty'}</label>
+          <input id="alm-move-qty" type="number" value="1" min="1" style="width:100%;padding:8px 10px;border:1.5px solid var(--g2);border-radius:7px;font-size:12px;font-family:var(--fn)"/>
+        </div>
+        <div class="fld"><label>${S.lang==='es'?'Motivo':'Reason'}</label>
+          <input id="alm-move-note" type="text" placeholder="${S.lang==='es'?'Ej: entrega, préstamo...':'E.g. delivery, loan...'}" style="width:100%;padding:8px 10px;border:1.5px solid var(--g2);border-radius:7px;font-size:12px;font-family:var(--fn)"/>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button onclick="moveAlmacenItem()" style="flex:1;padding:10px;border-radius:7px;background:var(--am);color:#fff;border:none;font-size:12px;font-weight:600;cursor:pointer;font-family:var(--fn)">✓ ${S.lang==='es'?'Registrar movimiento':'Register move'}</button>
+        <button onclick="set({almacenView:'list'})" style="flex:1;padding:10px;border-radius:7px;background:var(--g1);color:var(--g6);border:1.5px solid var(--g2);font-size:12px;font-weight:600;cursor:pointer;font-family:var(--fn)">${S.lang==='es'?'Cancelar':'Cancel'}</button>
+      </div>
+    </div>`;
+  }
+
+  // Items list
+  if (!filtered.length) {
+    h += `<div style="text-align:center;padding:24px 12px;color:var(--g6);font-size:12px">
+      <div style="font-size:28px;margin-bottom:8px">🏪</div>
+      ${S.lang==='es'?'Sin artículos — agrega el primero arriba':'No items — add the first one above'}
+    </div>`;
+  } else {
+    filtered.forEach((item, i) => {
+      const realIdx = items.indexOf(item);
+      const catInfo = ALMACEN_CATS.find(c=>c.id===item.cat)||ALMACEN_CATS[0];
+      const pct = item.initialStock > 0 ? Math.round(item.stock/item.initialStock*100) : 100;
+      const stockColor = item.stock===0?'var(--rd)':item.stock<=5?'var(--am)':'var(--gn)';
+      h += `<div style="background:var(--w);border:1.5px solid var(--g2);border-radius:10px;padding:11px 13px;margin-bottom:8px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+          <div style="display:flex;align-items:center;gap:7px">
+            <span style="font-size:16px">${catInfo.icon}</span>
+            <div>
+              <div style="font-size:12px;font-weight:600">${item.name}</div>
+              <div style="font-size:10px;color:var(--g6)">${S.lang==='es'?catInfo.es:catInfo.en}</div>
+            </div>
+          </div>
+          <div style="text-align:right">
+            <div style="font-family:var(--mo);font-size:18px;font-weight:700;color:${stockColor}">${item.stock}</div>
+            <div style="font-size:9px;color:var(--g6)">${item.unit||'u'}</div>
+          </div>
+        </div>
+        <div style="height:6px;background:var(--g2);border-radius:3px;overflow:hidden;margin-bottom:8px">
+          <div style="height:100%;border-radius:3px;width:${pct}%;background:${stockColor}"></div>
+        </div>
+        <div style="display:flex;gap:6px">
+          <button onclick="set({almacenView:'move',almacenSelItem:${realIdx},almacenMoveType:'entrada'})" style="flex:1;padding:6px;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;font-family:var(--fn);border:1.5px solid var(--gn);background:var(--gnl);color:var(--gn)">⬆ ${S.lang==='es'?'Entrada':'In'}</button>
+          <button onclick="set({almacenView:'move',almacenSelItem:${realIdx},almacenMoveType:'salida'})" style="flex:1;padding:6px;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;font-family:var(--fn);border:1.5px solid var(--rd);background:var(--rdl);color:var(--rd)">⬇ ${S.lang==='es'?'Salida':'Out'}</button>
+          <button onclick="delAlmacenItem(${realIdx})" style="padding:6px 10px;border-radius:6px;font-size:11px;cursor:pointer;font-family:var(--fn);border:1.5px solid var(--g2);background:var(--g1);color:var(--g4)">✕</button>
+        </div>
+        ${item.moves&&item.moves.length?`<div style="margin-top:8px;border-top:1px solid var(--g2);padding-top:6px">
+          ${item.moves.slice(-3).reverse().map(m=>`<div style="font-size:10px;color:var(--g6);padding:2px 0">${m.type==='entrada'?'⬆':'⬇'} ${m.qty} ${item.unit||'u'} · ${m.note||''} · ${m.at}</div>`).join('')}
+        </div>`:''}
+      </div>`;
+    });
+  }
+  return h;
+}
+
+function addAlmacenItem() {
+  const cat  = document.getElementById('alm-cat')?.value || 'medicamento';
+  const name = (document.getElementById('alm-name')?.value||'').trim();
+  const qty  = parseInt(document.getElementById('alm-qty')?.value)||0;
+  const unit = (document.getElementById('alm-unit')?.value||'').trim();
+  if (!name) { toast('⚠ ' + (S.lang==='es'?'Escribe el nombre':'Enter a name')); return; }
+  const item = { id:'alm_'+genCode(), cat, name, unit, stock:qty, initialStock:qty, moves:[] };
+  S.almacen = [...(S.almacen||[]), item];
+  pushFB();
+  toast('✓ ' + name);
+  set({almacenView:'list'});
+}
+
+function moveAlmacenItem() {
+  const idx  = S.almacenSelItem;
+  const qty  = parseInt(document.getElementById('alm-move-qty')?.value)||0;
+  const note = document.getElementById('alm-move-note')?.value||'';
+  const type = S.almacenMoveType||'entrada';
+  if (!qty) { toast('⚠ ' + (S.lang==='es'?'Cantidad requerida':'Quantity required')); return; }
+  S.almacen = S.almacen.map((item,i) => {
+    if (i!==idx) return item;
+    const newStock = type==='entrada'
+      ? item.stock + qty
+      : Math.max(0, item.stock - qty);
+    return { ...item, stock:newStock,
+      moves:[...(item.moves||[]), {type, qty, note, at:tnow(), op:S.stationOperator||S.currentOperator||''}]
+    };
+  });
+  pushFB();
+  toast('✓ ' + (type==='entrada'?'Entrada':'Salida') + ' registrada');
+  set({almacenView:'list'});
+}
+
+function delAlmacenItem(idx) {
+  S.almacen = S.almacen.filter((_,i)=>i!==idx);
+  pushFB();
+  render();
+}
+
 function renderExport() {
   const isConfigured = SHEETS_URL && !SHEETS_URL.includes('REEMPLAZA');
   return `<div class="stl">↑ Exportar / Export</div>
@@ -1325,6 +1492,7 @@ function onFirebaseReady() {
           if (m.length) S.meds = m;
         }
         if (data.initInventory) S.initInventory = data.initInventory;
+        if (data.almacen) { S.almacen = Array.isArray(data.almacen)?data.almacen:Object.values(data.almacen); changed=true; }
         if (data.villages && Array.isArray(data.villages) && data.villages.length) {
           S.villages = data.villages; changed = true;
         }

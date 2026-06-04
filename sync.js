@@ -22,14 +22,13 @@ function initFirebase() {
   } catch(e) { console.warn('Firebase error:', e); updateSyncUI('local'); }
 }
 
-function setSessionKey(date, location) {
-  // Normaliza: quita acentos, espacios y caracteres especiales
+function setSessionKey(jornadaNum, location) {
+  // Key = jornadaNum + location, normalized
   const normalize = str => str
-    .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // quitar acentos
-    .replace(/\//g,'-')
-    .replace(/\s+/g,'')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/\//g,'-').replace(/\s+/g,'')
     .replace(/[^a-zA-Z0-9_\-]/g,'');
-  SESSION_KEY = normalize(date) + '_' + normalize(location);
+  SESSION_KEY = 'J' + normalize(jornadaNum) + '_' + normalize(location||'');
   return SESSION_KEY;
 }
 
@@ -76,6 +75,8 @@ function syncFullState(state) {
     actDate: state.actDate,
     villages: state.villages || [],
     operators: state.operators || [],
+    almacen: state.almacen || [],
+    jornadaNum: state.jornadaNum || '',
     lastSync: new Date().toISOString(),
   })
   .then(() => {
